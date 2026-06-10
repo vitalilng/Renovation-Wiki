@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Renovation Wiki</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface2: #f2f1ed;
+    --border: rgba(0,0,0,0.09);
+    --border2: rgba(0,0,0,0.18);
+    --text: #1a1a18;
+    --text2: #5a5a56;
+    --text3: #9a9a96;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --green: #1D9E75; --green-bg: #E1F5EE; --green-dark: #0F6E56;
+    --blue: #2A82D4;  --blue-bg: #E6F1FB;  --blue-dark: #185FA5;
+    --amber: #B87316; --amber-bg: #FDF3E3; --amber-dark: #7A4C0E;
+    --sidebar-w: 230px;
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; font-size: 14px; }
+
+  /* ── Config screen ── */
+  #configScreen { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .config-card { background: var(--surface); border: 0.5px solid var(--border2); border-radius: var(--radius-lg); padding: 32px; width: 420px; max-width: 95vw; }
+  .config-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .config-card p { font-size: 13px; color: var(--text2); margin-bottom: 24px; line-height: 1.5; }
+  .config-group { margin-bottom: 14px; }
+  .config-label { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 5px; display: block; text-transform: uppercase; letter-spacing: 0.04em; }
+  .config-input { width: 100%; padding: 9px 11px; border: 0.5px solid var(--border2); border-radius: var(--radius); font-size: 13.5px; background: var(--surface); color: var(--text); font-family: monospace; outline: none; }
+  .config-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(42,130,212,0.12); }
+  .config-save { width: 100%; padding: 10px; background: var(--text); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+  .config-save:hover { background: #333; }
+  .config-note { font-size: 12px; color: var(--text3); margin-top: 14px; line-height: 1.5; }
+  .config-note a { color: var(--blue); }
+  .config-error { font-size: 12.5px; color: #c0392b; margin-top: 8px; display: none; }
+
+  /* ── Layout ── */
+  #app { display: flex; height: 100dvh; overflow: hidden; }
+  .sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--surface); border-right: 0.5px solid var(--border); display: flex; flex-direction: column; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  /* ── Sidebar ── */
+  .sidebar-top { padding: 14px 14px 8px; border-bottom: 0.5px solid var(--border); }
+  .app-name { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--text2); text-transform: uppercase; }
+  .search-wrap { position: relative; margin-top: 10px; }
+  .search-wrap i { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text3); }
+  .search-input { width: 100%; padding: 6px 8px 6px 28px; border: 0.5px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--surface2); color: var(--text); outline: none; }
+  .search-input:focus { border-color: var(--blue); background: var(--surface); }
+  .cat-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .cat-item { display: flex; align-items: center; gap: 9px; padding: 8px 12px; cursor: pointer; border-radius: 0; transition: background 0.1s; user-select: none; }
+  .cat-item:hover { background: var(--surface2); }
+  .cat-item.active { background: var(--surface2); }
+  .cat-item.active .cat-name { font-weight: 500; }
+  .cat-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+  .cat-name { font-size: 13.5px; flex: 1; }
+  .cat-count { font-size: 11px; color: var(--text3); background: var(--surface2); padding: 1px 6px; border-radius: 9px; }
+  .sidebar-foot { padding: 10px 12px; border-top: 0.5px solid var(--border); display: flex; gap: 8px; }
+  .foot-btn { flex: 1; padding: 7px; font-size: 12.5px; border: 0.5px solid var(--border2); border-radius: 8px; background: none; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .foot-btn:hover { background: var(--surface2); }
+
+  /* ── Topbar ── */
+  .topbar { padding: 12px 20px; border-bottom: 0.5px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .topbar-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .topbar-actions { display: flex; gap: 8px; }
+  .btn { padding: 6px 13px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: 8px; background: none; color: var(--text2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-family: inherit; }
+  .btn:hover { background: var(--surface2); }
+  .btn-dark { background: var(--text); color: #fff; border-color: var(--text); }
+  .btn-dark:hover { background: #2a2a28; }
+  .btn-ai { background: var(--blue-bg); color: var(--blue-dark); border-color: rgba(42,130,212,0.3); }
+  .btn-ai:hover { background: #cde3f7; }
+  .btn-ai.loading { opacity: 0.7; pointer-events: none; }
+
+  /* ── Content ── */
+  .content { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Article card ── */
+  .article { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .article-head { padding: 13px 14px 9px; display: flex; align-items: center; gap: 10px; }
+  .article-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .article-acts { display: flex; gap: 5px; }
+  .icon-btn { width: 26px; height: 26px; border-radius: 7px; border: 0.5px solid var(--border); background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text2); font-size: 13px; }
+  .icon-btn:hover { background: var(--surface2); border-color: var(--border2); }
+  .blocks { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 8px; }
+
+  /* ── Block types ── */
+  .block { border-radius: 0 8px 8px 0; padding: 9px 12px; border-left: 3px solid; line-height: 1.6; }
+  .block-principle { background: var(--green-bg); border-color: var(--green); }
+  .block-norm      { background: var(--blue-bg);  border-color: var(--blue); }
+  .block-note      { background: var(--surface2); border-color: var(--border2); }
+  .block-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .block-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+  .block-principle .block-label { color: var(--green-dark); }
+  .block-norm      .block-label { color: var(--blue-dark); }
+  .block-note      .block-label { color: var(--text2); }
+  .block-actions { display: flex; align-items: center; gap: 5px; }
+  .badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 2px 7px; border-radius: 9px; font-weight: 500; cursor: pointer; border: none; font-family: inherit; }
+  .badge-ok   { background: #EAF3DE; color: #3B6D11; }
+  .badge-warn { background: var(--amber-bg); color: var(--amber-dark); }
+  .block-text { font-size: 13.5px; color: var(--text); }
+  .block-source { margin-top: 5px; }
+  .source-link { font-size: 12px; color: var(--blue); text-decoration: none; display: inline-flex; align-items: center; gap: 3px; }
+  .source-link:hover { text-decoration: underline; }
+  .article-foot { padding: 0 14px 12px; }
+  .ai-row { display: flex; gap: 8px; }
+
+  /* ── Empty ── */
+  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text3); padding: 40px; text-align: center; }
+  .empty i { font-size: 40px; opacity: 0.35; }
+  .empty-title { font-size: 15px; font-weight: 500; color: var(--text2); }
+  .empty-sub { font-size: 13px; }
+
+  /* ── Loader ── */
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(42,130,212,0.3); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ai-stream-block { background: var(--blue-bg); border: 0.5px dashed rgba(42,130,212,0.4); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; color: var(--blue-dark); white-space: pre-wrap; line-height: 1.6; margin: 0 14px 10px; min-height: 48px; }
+
+  /* ── Modal ── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); width: 480px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 0.5px solid var(--border2); }
+  .modal-head { padding: 15px 16px 11px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .modal-title { font-size: 15px; font-weight: 600; flex: 1; }
+  .modal-body { padding: 15px 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .modal-foot { padding: 11px 16px; border-top: 0.5px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
+  .field input, .field textarea, .field select { padding: 8px 10px; border: 0.5px solid var(--border2); border-radius: 8px; font-size: 13.5px; color: var(--text); background: var(--surface); font-family: inherit; outline: none; }
+  .field input:focus, .field textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(42,130,212,0.1); }
+  .field textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
+  .type-row { display: flex; gap: 8px; }
+  .type-chip { flex: 1; padding: 7px 4px; text-align: center; font-size: 12.5px; border: 0.5px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 500; color: var(--text2); background: var(--surface2); transition: all 0.1s; user-select: none; }
+  .type-chip.active-principle { background: var(--green-bg); color: var(--green-dark); border-color: var(--green); }
+  .type-chip.active-norm      { background: var(--blue-bg);  color: var(--blue-dark);  border-color: var(--blue); }
+  .type-chip.active-note      { background: var(--surface2); color: var(--text2);       border-color: var(--border2); }
+  .check-row { display: flex; align-items: center; gap: 8px; }
+  .check-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
+  .check-row label { font-size: 13.5px; cursor: pointer; }
+  .hidden { display: none !important; }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 18px; border-radius: 9px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 999; }
+
+  /* ── Status bar ── */
+  .statusbar { padding: 4px 20px; font-size: 11px; color: var(--text3); background: var(--surface); border-top: 0.5px solid var(--border); display: flex; gap: 16px; flex-shrink: 0; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .dot-ok { background: #27ae60; }
+  .dot-err { background: #e74c3c; }
+  .dot-loading { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+</style>
+</head>
+<body>
+
+<!-- Config screen -->
+<div id="configScreen">
+  <div class="config-card">
+    <h2>🔧 Renovation Wiki</h2>
+    <p>Личная база знаний для ремонта. Подключи Supabase и Anthropic API для работы.</p>
+
+    <div class="config-group">
+      <label class="config-label">Supabase URL</label>
+      <input class="config-input" id="cfgSupaUrl" placeholder="https://xxxx.supabase.co">
+    </div>
+    <div class="config-group">
+      <label class="config-label">Supabase Anon Key</label>
+      <input class="config-input" id="cfgSupaKey" placeholder="eyJhbGci...">
+    </div>
+    <div class="config-group">
+      <label class="config-label">Anthropic API Key</label>
+      <input class="config-input" id="cfgAnthKey" placeholder="sk-ant-...">
+    </div>
+
+    <button class="config-save" onclick="saveConfig()">Сохранить и войти</button>
+    <div class="config-error" id="cfgError"></div>
+    <div class="config-note">
+      Данные сохраняются в localStorage браузера.<br>
+      <a href="https://supabase.com" target="_blank">Supabase</a> бесплатен до 50MB.
+      Нужная SQL схема указана в README ниже.
+    </div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app" class="hidden">
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <div class="app-name">🔧 Renovation Wiki</div>
+      <div class="search-wrap">
+        <i class="ti ti-search"></i>
+        <input class="search-input" id="searchInput" placeholder="Поиск..." oninput="onSearch()">
+      </div>
+    </div>
+    <div class="cat-list" id="catList"></div>
+    <div class="sidebar-foot">
+      <button class="foot-btn" onclick="openAddCat()"><i class="ti ti-plus"></i> Категория</button>
+      <button class="foot-btn" onclick="openSettings()"><i class="ti ti-settings"></i></button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topTitle">—</span>
+      <div class="topbar-actions">
+        <button class="btn" onclick="exportMd()"><i class="ti ti-download"></i> Экспорт</button>
+        <button class="btn btn-dark" onclick="openAddArticle()"><i class="ti ti-plus"></i> Статья</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="statusbar">
+      <span id="statusDb"><span class="status-dot dot-loading"></span>Supabase...</span>
+      <span id="statusAi"><span class="status-dot dot-loading"></span>Anthropic...</span>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" class="overlay hidden" onclick="closeModalIfOutside(event)">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <span class="modal-title" id="modalTitle"></span>
+      <button class="icon-btn" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!--  README / SQL (hidden, for reference)
+══════════════════════════════════════════════════════
+
+  === Supabase SQL schema (run once in SQL Editor) ===
+
+  create table categories (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    icon text default 'ti-tool',
+    color text default '#378ADD',
+    bg text default '#E6F1FB',
+    sort_order int default 0,
+    created_at timestamptz default now()
+  );
+
+  create table articles (
+    id uuid primary key default gen_random_uuid(),
+    category_id uuid references categories(id) on delete cascade,
+    title text not null,
+    sort_order int default 0,
+    created_at timestamptz default now()
+  );
+
+  create table blocks (
+    id uuid primary key default gen_random_uuid(),
+    article_id uuid references articles(id) on delete cascade,
+    type text check (type in ('principle','norm','note')) default 'principle',
+    content text not null,
+    verified boolean default false,
+    source text,
+    sort_order int default 0,
+    created_at timestamptz default now()
+  );
+
+  -- Row Level Security (enable after creating anon policies)
+  alter table categories enable row level security;
+  alter table articles    enable row level security;
+  alter table blocks      enable row level security;
+
+  create policy "anon all" on categories for all using (true) with check (true);
+  create policy "anon all" on articles    for all using (true) with check (true);
+  create policy "anon all" on blocks      for all using (true) with check (true);
+
+══════════════════════════════════════════════════════ -->
+
+<script>
+// ══════════════════════ CONFIG ══════════════════════
+let CFG = {};
+let supabase = null;
+
+function loadConfig() {
+  const raw = localStorage.getItem('rw_config');
+  if (raw) {
+    CFG = JSON.parse(raw);
+    return !!(CFG.supaUrl && CFG.supaKey && CFG.anthKey);
+  }
+  return false;
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfgSupaUrl').value.trim();
+  const key = document.getElementById('cfgSupaKey').value.trim();
+  const ant = document.getElementById('cfgAnthKey').value.trim();
+  const err = document.getElementById('cfgError');
+
+  if (!url || !key || !ant) { err.textContent = 'Заполни все поля.'; err.style.display='block'; return; }
+  if (!url.startsWith('https://')) { err.textContent = 'Supabase URL должен начинаться с https://'; err.style.display='block'; return; }
+  if (!ant.startsWith('sk-ant-')) { err.textContent = 'Anthropic key должен начинаться с sk-ant-'; err.style.display='block'; return; }
+
+  CFG = { supaUrl: url, supaKey: key, anthKey: ant };
+  localStorage.setItem('rw_config', JSON.stringify(CFG));
+  err.style.display = 'none';
+  initApp();
+}
+
+function openSettings() {
+  const body = `
+    <div class="field"><label>Supabase URL</label><input id="s_url" value="${CFG.supaUrl || ''}"></div>
+    <div class="field"><label>Supabase Anon Key</label><input id="s_skey" value="${CFG.supaKey || ''}"></div>
+    <div class="field"><label>Anthropic API Key</label><input id="s_akey" type="password" value="${CFG.anthKey || ''}"></div>`;
+  const foot = `<button class="btn" onclick="closeModal()">Отмена</button>
+    <button class="btn btn-dark" onclick="updateSettings()">Сохранить</button>`;
+  openModal('Настройки', body, foot);
+}
+
+function updateSettings() {
+  CFG.supaUrl = document.getElementById('s_url').value.trim();
+  CFG.supaKey = document.getElementById('s_skey').value.trim();
+  CFG.anthKey = document.getElementById('s_akey').value.trim();
+  localStorage.setItem('rw_config', JSON.stringify(CFG));
+  closeModal();
+  toast('Настройки сохранены');
+  supabase = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
+  loadData();
+}
+
+// ══════════════════════ STATE ══════════════════════
+let STATE = {
+  categories: [],
+  articles: [],        // all articles
+  blocks: [],          // all blocks
+  activeCatId: null,
+  search: '',
+};
+
+// ══════════════════════ INIT ══════════════════════
+async function initApp() {
+  document.getElementById('configScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  supabase = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
+  await loadData();
+  checkAIStatus();
+}
+
+async function checkAIStatus() {
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': CFG.anthKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] })
+    });
+    const ok = r.ok || r.status === 400;
+    setStatus('ai', ok ? 'ok' : 'err', ok ? 'Anthropic OK' : 'Anthropic ошибка');
+  } catch { setStatus('ai', 'err', 'Anthropic недоступен'); }
+}
+
+function setStatus(which, state, text) {
+  const el = document.getElementById('status' + (which === 'db' ? 'Db' : 'Ai'));
+  const dot = state === 'ok' ? 'dot-ok' : state === 'err' ? 'dot-err' : 'dot-loading';
+  el.innerHTML = `<span class="status-dot ${dot}"></span>${text}`;
+}
+
+async function loadData() {
+  setStatus('db', 'loading', 'Загрузка...');
+  try {
+    const [cats, arts, blks] = await Promise.all([
+      supabase.from('categories').select('*').order('sort_order'),
+      supabase.from('articles').select('*').order('sort_order'),
+      supabase.from('blocks').select('*').order('sort_order'),
+    ]);
+    if (cats.error) throw cats.error;
+    STATE.categories = cats.data || [];
+    STATE.articles   = arts.data || [];
+    STATE.blocks     = blks.data || [];
+
+    // Seed default categories if empty
+    if (STATE.categories.length === 0) await seedCategories();
+
+    if (!STATE.activeCatId && STATE.categories.length > 0) STATE.activeCatId = STATE.categories[0].id;
+    setStatus('db', 'ok', 'Supabase OK');
+    renderAll();
+  } catch(e) {
+    setStatus('db', 'err', 'Ошибка БД: ' + e.message);
+  }
+}
+
+async function seedCategories() {
+  const defaults = [
+    { name: 'Канализация', icon: 'ti-ripple',   color: '#1D9E75', bg: '#E1F5EE', sort_order: 0 },
+    { name: 'Сантехника',  icon: 'ti-droplet',  color: '#2A82D4', bg: '#E6F1FB', sort_order: 1 },
+    { name: 'Стройка',     icon: 'ti-building', color: '#B87316', bg: '#FDF3E3', sort_order: 2 },
+    { name: 'Электрика',   icon: 'ti-bolt',     color: '#D4537E', bg: '#FBEAF0', sort_order: 3 },
+  ];
+  const { data } = await supabase.from('categories').insert(defaults).select();
+  STATE.categories = data || [];
+}
+
+// ══════════════════════ RENDER ══════════════════════
+function renderAll() {
+  renderSidebar();
+  renderContent();
+}
+
+function renderSidebar() {
+  const list = document.getElementById('catList');
+  list.innerHTML = STATE.categories.map(cat => {
+    const count = STATE.articles.filter(a => a.category_id === cat.id).length;
+    const active = STATE.activeCatId === cat.id ? 'active' : '';
+    return `<div class="cat-item ${active}" onclick="selectCat('${cat.id}')">
+      <div class="cat-icon" style="background:${cat.bg};color:${cat.color}"><i class="ti ${cat.icon}"></i></div>
+      <span class="cat-name">${esc(cat.name)}</span>
+      <span class="cat-count">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderContent() {
+  const area = document.getElementById('content');
+  const cat = STATE.categories.find(c => c.id === STATE.activeCatId);
+  document.getElementById('topTitle').textContent = cat ? cat.name : '—';
+
+  let articles = STATE.articles.filter(a => a.category_id === STATE.activeCatId);
+
+  if (STATE.search) {
+    const q = STATE.search.toLowerCase();
+    articles = articles.filter(a => {
+      if (a.title.toLowerCase().includes(q)) return true;
+      const blks = STATE.blocks.filter(b => b.article_id === a.id);
+      return blks.some(b => b.content.toLowerCase().includes(q));
+    });
+  }
+
+  if (articles.length === 0) {
+    area.innerHTML = `<div class="empty">
+      <i class="ti ti-notebook"></i>
+      <div class="empty-title">Пока пусто</div>
+      <div class="empty-sub">Добавь статью вручную или сгенерируй через AI</div>
+      <button class="btn btn-ai" style="margin-top:12px" onclick="aiGenerateArticle()">
+        <i class="ti ti-sparkles"></i> Сгенерировать основы
+      </button>
+    </div>`;
+    return;
+  }
+
+  area.innerHTML = articles.map(a => renderArticle(a)).join('');
+}
+
+function renderArticle(article) {
+  const blks = STATE.blocks.filter(b => b.article_id === article.id);
+  const blocksHtml = blks.map((b, i) => renderBlock(b)).join('');
+  return `<div class="article" id="art-${article.id}">
+    <div class="article-head">
+      <span class="article-title">${esc(article.title)}</span>
+      <div class="article-acts">
+        <button class="icon-btn" title="Добавить блок" onclick="openAddBlock('${article.id}')"><i class="ti ti-plus"></i></button>
+        <button class="icon-btn" title="Удалить статью" onclick="deleteArticle('${article.id}')"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+    <div class="blocks" id="blocks-${article.id}">${blocksHtml}</div>
+    <div class="article-foot">
+      <div class="ai-row">
+        <button class="btn btn-ai" id="aibtn-${article.id}" onclick="aiExpandArticle('${article.id}')">
+          <i class="ti ti-sparkles"></i> Дополнить через AI
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderBlock(b) {
+  const labels = { principle: '📐 Принцип', norm: '📏 Норматив', note: '📝 Заметка' };
+  const badgeHtml = b.verified
+    ? `<button class="badge badge-ok" title="Снять отметку" onclick="toggleVerified('${b.id}')"><i class="ti ti-circle-check"></i> Проверено</button>`
+    : `<button class="badge badge-warn" title="Отметить как проверенное" onclick="toggleVerified('${b.id}')"><i class="ti ti-alert-triangle"></i> Перепроверить</button>`;
+  const sourceHtml = b.source
+    ? `<div class="block-source"><a class="source-link" href="https://www.google.com/search?q=${encodeURIComponent(b.source)}" target="_blank"><i class="ti ti-external-link"></i> ${esc(b.source)}</a></div>`
+    : '';
+  return `<div class="block block-${b.type}" id="blk-${b.id}">
+    <div class="block-top">
+      <span class="block-label">${labels[b.type] || b.type}</span>
+      <div class="block-actions">
+        ${badgeHtml}
+        <button class="icon-btn" style="width:22px;height:22px;font-size:12px" title="Редактировать" onclick="openEditBlock('${b.id}')"><i class="ti ti-edit"></i></button>
+        <button class="icon-btn" style="width:22px;height:22px;font-size:12px" title="Удалить блок" onclick="deleteBlock('${b.id}')"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+    <div class="block-text">${esc(b.content)}</div>
+    ${sourceHtml}
+  </div>`;
+}
+
+// ══════════════════════ ACTIONS ══════════════════════
+function selectCat(id) {
+  STATE.activeCatId = id;
+  renderAll();
+}
+
+function onSearch() {
+  STATE.search = document.getElementById('searchInput').value;
+  renderContent();
+}
+
+// ── Categories ──
+function openAddCat() {
+  const body = `
+    <div class="field"><label>Название</label><input id="nc_name" placeholder="Например: Гидроизоляция" autofocus></div>
+    <div class="field"><label>Иконка (Tabler)</label>
+      <select id="nc_icon">
+        <option value="ti-tool">🔧 ti-tool</option>
+        <option value="ti-flame">🔥 ti-flame</option>
+        <option value="ti-droplet">💧 ti-droplet</option>
+        <option value="ti-bolt">⚡ ti-bolt</option>
+        <option value="ti-hammer">🔨 ti-hammer</option>
+        <option value="ti-paint">🎨 ti-paint</option>
+        <option value="ti-layers">📦 ti-layers</option>
+        <option value="ti-stairs">🪜 ti-stairs</option>
+        <option value="ti-door">🚪 ti-door</option>
+        <option value="ti-window">🪟 ti-window</option>
+      </select>
+    </div>`;
+  const foot = `<button class="btn" onclick="closeModal()">Отмена</button>
+    <button class="btn btn-dark" onclick="addCategory()"><i class="ti ti-plus"></i> Добавить</button>`;
+  openModal('Новая категория', body, foot);
+  setTimeout(() => document.getElementById('nc_name')?.focus(), 50);
+}
+
+async function addCategory() {
+  const name = document.getElementById('nc_name').value.trim();
+  const icon = document.getElementById('nc_icon').value;
+  if (!name) return;
+  const palettes = [
+    { color: '#533AB7', bg: '#EEEDFE' }, { color: '#D4537E', bg: '#FBEAF0' },
+    { color: '#B87316', bg: '#FDF3E3' }, { color: '#3B6D11', bg: '#EAF3DE' },
+    { color: '#1D9E75', bg: '#E1F5EE' },
+  ];
+  const p = palettes[STATE.categories.length % palettes.length];
+  const { data, error } = await supabase.from('categories').insert({
+    name, icon, color: p.color, bg: p.bg, sort_order: STATE.categories.length
+  }).select().single();
+  if (error) { toast('Ошибка: ' + error.message); return; }
+  STATE.categories.push(data);
+  STATE.activeCatId = data.id;
+  closeModal();
+  renderAll();
+}
+
+// ── Articles ──
+function openAddArticle() {
+  const body = `<div class="field"><label>Название статьи</label>
+    <input id="na_title" placeholder="Например: Уклон труб" autofocus></div>`;
+  const foot = `<button class="btn" onclick="closeModal()">Отмена</button>
+    <button class="btn btn-dark" onclick="addArticle()"><i class="ti ti-plus"></i> Создать</button>`;
+  openModal('Новая статья', body, foot);
+  setTimeout(() => document.getElementById('na_title')?.focus(), 50);
+}
+
+async function addArticle() {
+  const title = document.getElementById('na_title').value.trim();
+  if (!title) return;
+  const { data, error } = await supabase.from('articles').insert({
+    title, category_id: STATE.activeCatId, sort_order: STATE.articles.length
+  }).select().single();
+  if (error) { toast('Ошибка: ' + error.message); return; }
+  STATE.articles.push(data);
+  closeModal();
+  renderContent();
+}
+
+async function deleteArticle(id) {
+  if (!confirm('Удалить статью и все блоки?')) return;
+  await supabase.from('articles').delete().eq('id', id);
+  STATE.articles = STATE.articles.filter(a => a.id !== id);
+  STATE.blocks   = STATE.blocks.filter(b => b.article_id !== id);
+  renderSidebar();
+  renderContent();
+}
+
+// ── Blocks ──
+let _editBlockId = null;
+let _blockType = 'principle';
+
+function openAddBlock(articleId) {
+  _editBlockId = null;
+  _blockType = 'principle';
+  showBlockModal(null, articleId);
+}
+
+function openEditBlock(blockId) {
+  const b = STATE.blocks.find(x => x.id === blockId);
+  if (!b) return;
+  _editBlockId = blockId;
+  _blockType = b.type;
+  showBlockModal(b, null);
+}
+
+function showBlockModal(existing, articleId) {
+  const isEdit = !!existing;
+  const body = `
+    <div class="field"><label>Тип</label>
+      <div class="type-row">
+        <div class="type-chip ${_blockType==='principle'?'active-principle':''}" id="tc-principle" onclick="selectType('principle')">📐 Принцип</div>
+        <div class="type-chip ${_blockType==='norm'?'active-norm':''}" id="tc-norm" onclick="selectType('norm')">📏 Норматив</div>
+        <div class="type-chip ${_blockType==='note'?'active-note':''}" id="tc-note" onclick="selectType('note')">📝 Заметка</div>
+      </div>
+    </div>
+    <div class="field"><label>Содержание</label>
+      <textarea id="bk_content" placeholder="Опиши принцип, норму или практический совет...">${esc(existing?.content || '')}</textarea>
+    </div>
+    <div class="field"><label>Источник (необязательно)</label>
+      <input id="bk_source" placeholder="Например: СП 30.13330.2020, п.8.3" value="${esc(existing?.source || '')}">
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="bk_verified" ${existing?.verified ? 'checked' : ''}>
+      <label for="bk_verified">Данные проверены / надёжный источник</label>
+    </div>`;
+  const artId = existing ? STATE.blocks.find(b=>b.id===existing.id)?.article_id : articleId;
+  const foot = `<button class="btn" onclick="closeModal()">Отмена</button>
+    <button class="btn btn-dark" onclick="saveBlock('${artId}')"><i class="ti ti-check"></i> Сохранить</button>`;
+  openModal(isEdit ? 'Редактировать блок' : 'Новый блок', body, foot);
+}
+
+function selectType(t) {
+  _blockType = t;
+  ['principle','norm','note'].forEach(x => {
+    const el = document.getElementById('tc-' + x);
+    if (el) el.className = 'type-chip' + (x === t ? ` active-${x}` : '');
+  });
+}
+
+async function saveBlock(articleId) {
+  const content = document.getElementById('bk_content').value.trim();
+  if (!content) return;
+  const source  = document.getElementById('bk_source').value.trim() || null;
+  const verified= document.getElementById('bk_verified').checked;
+  const payload = { type: _blockType, content, source, verified };
+
+  if (_editBlockId) {
+    const { error } = await supabase.from('blocks').update(payload).eq('id', _editBlockId);
+    if (error) { toast('Ошибка: ' + error.message); return; }
+    const idx = STATE.blocks.findIndex(b => b.id === _editBlockId);
+    if (idx >= 0) STATE.blocks[idx] = { ...STATE.blocks[idx], ...payload };
+  } else {
+    payload.article_id = articleId;
+    payload.sort_order = STATE.blocks.filter(b => b.article_id === articleId).length;
+    const { data, error } = await supabase.from('blocks').insert(payload).select().single();
+    if (error) { toast('Ошибка: ' + error.message); return; }
+    STATE.blocks.push(data);
+  }
+  closeModal();
+  renderContent();
+}
+
+async function deleteBlock(id) {
+  await supabase.from('blocks').delete().eq('id', id);
+  STATE.blocks = STATE.blocks.filter(b => b.id !== id);
+  renderContent();
+}
+
+async function toggleVerified(id) {
+  const b = STATE.blocks.find(x => x.id === id);
+  if (!b) return;
+  const newVal = !b.verified;
+  await supabase.from('blocks').update({ verified: newVal }).eq('id', id);
+  b.verified = newVal;
+  const el = document.getElementById('blk-' + id);
+  if (el) el.outerHTML = renderBlock(b);
+}
+
+// ══════════════════════ AI ══════════════════════
+const SYSTEM_PROMPT = `Ты — эксперт-строитель, пишешь учебник для новичка по ремонту санузла.
+Пиши кратко и конкретно. Для каждой темы давай:
+- Принципы (базовые правила, которые нельзя нарушать)
+- Нормативы (конкретные цифры из СНиП, ПУЭ, ГОСТ — только если уверен; если не уверен, ЯВНО пиши "⚠️ Перепроверить по [документ]")
+- Практические заметки (советы из практики)
+
+ВАЖНО: Если не уверен в точной цифре или норме — пиши "⚠️ Перепроверить" вместо выдумывания. Лучше честно сказать "не знаю" чем дать неверную цифру.
+
+Отвечай на русском. Формат ответа — JSON массив блоков:
+[
+  { "type": "principle", "content": "...", "verified": true, "source": null },
+  { "type": "norm", "content": "...", "verified": false, "source": "СП 30.13330.2020" },
+  { "type": "note", "content": "...", "verified": true, "source": null }
+]
+Возвращай ТОЛЬКО JSON, без пояснений и markdown.`;
+
+async function aiGenerateArticle() {
+  const cat = STATE.categories.find(c => c.id === STATE.activeCatId);
+  if (!cat) return;
+
+  // Ask for title first
+  const body = `<div class="field"><label>Тема статьи</label>
+    <input id="ai_topic" placeholder="Например: Уклон канализационных труб" autofocus></div>
+    <div class="field"><label>Дополнительный контекст (необязательно)</label>
+    <textarea id="ai_ctx" rows="2" placeholder="Например: квартирный ремонт, трубы ПВХ 50мм"></textarea></div>`;
+  const foot = `<button class="btn" onclick="closeModal()">Отмена</button>
+    <button class="btn btn-ai" onclick="runAiGenerate('${cat.id}', '${esc(cat.name)}')"><i class="ti ti-sparkles"></i> Сгенерировать</button>`;
+  openModal('Генерация статьи', body, foot);
+  setTimeout(() => document.getElementById('ai_topic')?.focus(), 50);
+}
+
+async function runAiGenerate(catId, catName) {
+  const topic = document.getElementById('ai_topic').value.trim();
+  const ctx   = document.getElementById('ai_ctx').value.trim();
+  if (!topic) return;
+  closeModal();
+
+  // Create article first
+  const { data: art, error: artErr } = await supabase.from('articles').insert({
+    title: topic, category_id: catId, sort_order: STATE.articles.length
+  }).select().single();
+  if (artErr) { toast('Ошибка создания статьи'); return; }
+  STATE.articles.push(art);
+  renderContent();
+
+  // Show streaming block
+  const blocksEl = document.getElementById('blocks-' + art.id);
+  const streamDiv = document.createElement('div');
+  streamDiv.className = 'ai-stream-block';
+  streamDiv.id = 'stream-' + art.id;
+  streamDiv.textContent = '⏳ Генерирую...';
+  blocksEl?.appendChild(streamDiv);
+
+  const btn = document.getElementById('aibtn-' + art.id);
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spinner"></span> Генерирую...'; }
+
+  try {
+    const prompt = `Категория: ${catName}\nТема: ${topic}${ctx ? '\nКонтекст: ' + ctx : ''}`;
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CFG.anthKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) throw new Error('API error ' + response.status);
+    const data = await response.json();
+    const raw = data.content?.[0]?.text || '[]';
+
+    streamDiv.remove();
+
+    let blocks;
+    try {
+      const clean = raw.replace(/```json|```/g, '').trim();
+      blocks = JSON.parse(clean);
+    } catch { toast('AI вернул неверный формат'); return; }
+
+    // Save blocks to Supabase
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      const payload = {
+        article_id: art.id,
+        type: ['principle','norm','note'].includes(b.type) ? b.type : 'note',
+        content: b.content || '',
+        verified: !!b.verified,
+        source: b.source || null,
+        sort_order: i,
+      };
+      const { data: saved } = await supabase.from('blocks').insert(payload).select().single();
+      if (saved) STATE.blocks.push(saved);
+    }
+
+    renderContent();
+    toast(`Создано ${blocks.length} блоков`);
+  } catch(e) {
+    streamDiv.textContent = '❌ Ошибка: ' + e.message;
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '<i class="ti ti-sparkles"></i> Дополнить через AI'; }
+  }
+}
+
+async function aiExpandArticle(articleId) {
+  const art = STATE.articles.find(a => a.id === articleId);
+  const cat = STATE.categories.find(c => c.id === STATE.activeCatId);
+  if (!art || !cat) return;
+
+  const btn = document.getElementById('aibtn-' + articleId);
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spinner"></span> Генерирую...'; }
+
+  const existing = STATE.blocks.filter(b => b.article_id === articleId)
+    .map(b => `[${b.type}] ${b.content}`).join('\n');
+
+  try {
+    const prompt = `Категория: ${cat.name}\nТема: ${art.title}\n\nУже есть:\n${existing || 'ничего'}\n\nДобавь 2-3 новых блока, которых ещё нет.`;
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CFG.anthKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const raw = data.content?.[0]?.text || '[]';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const blocks = JSON.parse(clean);
+
+    const baseOrder = STATE.blocks.filter(b => b.article_id === articleId).length;
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      const payload = {
+        article_id: articleId,
+        type: ['principle','norm','note'].includes(b.type) ? b.type : 'note',
+        content: b.content || '',
+        verified: !!b.verified,
+        source: b.source || null,
+        sort_order: baseOrder + i,
+      };
+      const { data: saved } = await supabase.from('blocks').insert(payload).select().single();
+      if (saved) STATE.blocks.push(saved);
+    }
+
+    renderContent();
+    toast(`Добавлено ${blocks.length} блоков`);
+  } catch(e) {
+    toast('Ошибка AI: ' + e.message);
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '<i class="ti ti-sparkles"></i> Дополнить через AI'; }
+  }
+}
+
+// ══════════════════════ EXPORT ══════════════════════
+function exportMd() {
+  const cat = STATE.categories.find(c => c.id === STATE.activeCatId);
+  const articles = STATE.articles.filter(a => a.category_id === STATE.activeCatId);
+  let md = `# ${cat?.name || 'Renovation Wiki'}\n\n`;
+  articles.forEach(a => {
+    md += `## ${a.title}\n\n`;
+    const blks = STATE.blocks.filter(b => b.article_id === a.id);
+    blks.forEach(b => {
+      const label = { principle: 'Принцип', norm: 'Норматив', note: 'Заметка' }[b.type] || b.type;
+      const status = b.verified ? '✅' : '⚠️ Перепроверить';
+      md += `### ${label} ${status}\n\n${b.content}\n\n`;
+      if (b.source) md += `*Источник: ${b.source}*\n\n`;
+    });
+  });
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${cat?.name || 'wiki'}.md`;
+  a.click();
+  toast('Экспорт скачан');
+}
+
+// ══════════════════════ MODAL ══════════════════════
+function openModal(title, body, foot) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modalFoot').innerHTML = foot;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('overlay').classList.add('hidden'); }
+function closeModalIfOutside(e) { if (e.target === document.getElementById('overlay')) closeModal(); }
+
+// ══════════════════════ UTILS ══════════════════════
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ══════════════════════ BOOT ══════════════════════
+if (loadConfig()) {
+  initApp();
+} else {
+  // Pre-fill if localStorage has partial data
+  const raw = localStorage.getItem('rw_config');
+  if (raw) {
+    const c = JSON.parse(raw);
+    if (c.supaUrl) document.getElementById('cfgSupaUrl').value = c.supaUrl;
+    if (c.supaKey) document.getElementById('cfgSupaKey').value = c.supaKey;
+    if (c.anthKey) document.getElementById('cfgAnthKey').value = c.anthKey;
+  }
+}
+</script>
+</body>
+</html>
