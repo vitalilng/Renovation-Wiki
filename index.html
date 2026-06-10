@@ -283,7 +283,7 @@
 <script>
 // ══════════════════════ CONFIG ══════════════════════
 let CFG = {};
-let supabase = null;
+let db = null;
 
 function loadConfig() {
   const raw = localStorage.getItem('rw_config');
@@ -327,7 +327,7 @@ function updateSettings() {
   localStorage.setItem('rw_config', JSON.stringify(CFG));
   closeModal();
   toast('Настройки сохранены');
-  supabase = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
+  db = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
   loadData();
 }
 
@@ -344,7 +344,7 @@ let STATE = {
 async function initApp() {
   document.getElementById('configScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  supabase = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
+  db = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
   await loadData();
   checkAIStatus();
 }
@@ -371,9 +371,9 @@ async function loadData() {
   setStatus('db', 'loading', 'Загрузка...');
   try {
     const [cats, arts, blks] = await Promise.all([
-      supabase.from('categories').select('*').order('sort_order'),
-      supabase.from('articles').select('*').order('sort_order'),
-      supabase.from('blocks').select('*').order('sort_order'),
+      db.from('categories').select('*').order('sort_order'),
+      db.from('articles').select('*').order('sort_order'),
+      db.from('blocks').select('*').order('sort_order'),
     ]);
     if (cats.error) throw cats.error;
     STATE.categories = cats.data || [];
@@ -398,7 +398,7 @@ async function seedCategories() {
     { name: 'Стройка',     icon: 'ti-building', color: '#B87316', bg: '#FDF3E3', sort_order: 2 },
     { name: 'Электрика',   icon: 'ti-bolt',     color: '#D4537E', bg: '#FBEAF0', sort_order: 3 },
   ];
-  const { data } = await supabase.from('categories').insert(defaults).select();
+  const { data } = await db.from('categories').insert(defaults).select();
   STATE.categories = data || [];
 }
 
@@ -541,7 +541,7 @@ async function addCategory() {
     { color: '#1D9E75', bg: '#E1F5EE' },
   ];
   const p = palettes[STATE.categories.length % palettes.length];
-  const { data, error } = await supabase.from('categories').insert({
+  const { data, error } = await db.from('categories').insert({
     name, icon, color: p.color, bg: p.bg, sort_order: STATE.categories.length
   }).select().single();
   if (error) { toast('Ошибка: ' + error.message); return; }
@@ -564,7 +564,7 @@ function openAddArticle() {
 async function addArticle() {
   const title = document.getElementById('na_title').value.trim();
   if (!title) return;
-  const { data, error } = await supabase.from('articles').insert({
+  const { data, error } = await db.from('articles').insert({
     title, category_id: STATE.activeCatId, sort_order: STATE.articles.length
   }).select().single();
   if (error) { toast('Ошибка: ' + error.message); return; }
@@ -575,7 +575,7 @@ async function addArticle() {
 
 async function deleteArticle(id) {
   if (!confirm('Удалить статью и все блоки?')) return;
-  await supabase.from('articles').delete().eq('id', id);
+  await db.from('articles').delete().eq('id', id);
   STATE.articles = STATE.articles.filter(a => a.id !== id);
   STATE.blocks   = STATE.blocks.filter(b => b.article_id !== id);
   renderSidebar();
@@ -642,14 +642,14 @@ async function saveBlock(articleId) {
   const payload = { type: _blockType, content, source, verified };
 
   if (_editBlockId) {
-    const { error } = await supabase.from('blocks').update(payload).eq('id', _editBlockId);
+    const { error } = await db.from('blocks').update(payload).eq('id', _editBlockId);
     if (error) { toast('Ошибка: ' + error.message); return; }
     const idx = STATE.blocks.findIndex(b => b.id === _editBlockId);
     if (idx >= 0) STATE.blocks[idx] = { ...STATE.blocks[idx], ...payload };
   } else {
     payload.article_id = articleId;
     payload.sort_order = STATE.blocks.filter(b => b.article_id === articleId).length;
-    const { data, error } = await supabase.from('blocks').insert(payload).select().single();
+    const { data, error } = await db.from('blocks').insert(payload).select().single();
     if (error) { toast('Ошибка: ' + error.message); return; }
     STATE.blocks.push(data);
   }
@@ -658,7 +658,7 @@ async function saveBlock(articleId) {
 }
 
 async function deleteBlock(id) {
-  await supabase.from('blocks').delete().eq('id', id);
+  await db.from('blocks').delete().eq('id', id);
   STATE.blocks = STATE.blocks.filter(b => b.id !== id);
   renderContent();
 }
@@ -667,7 +667,7 @@ async function toggleVerified(id) {
   const b = STATE.blocks.find(x => x.id === id);
   if (!b) return;
   const newVal = !b.verified;
-  await supabase.from('blocks').update({ verified: newVal }).eq('id', id);
+  await db.from('blocks').update({ verified: newVal }).eq('id', id);
   b.verified = newVal;
   const el = document.getElementById('blk-' + id);
   if (el) el.outerHTML = renderBlock(b);
@@ -712,7 +712,7 @@ async function runAiGenerate(catId, catName) {
   closeModal();
 
   // Create article first
-  const { data: art, error: artErr } = await supabase.from('articles').insert({
+  const { data: art, error: artErr } = await db.from('articles').insert({
     title: topic, category_id: catId, sort_order: STATE.articles.length
   }).select().single();
   if (artErr) { toast('Ошибка создания статьи'); return; }
@@ -771,7 +771,7 @@ async function runAiGenerate(catId, catName) {
         source: b.source || null,
         sort_order: i,
       };
-      const { data: saved } = await supabase.from('blocks').insert(payload).select().single();
+      const { data: saved } = await db.from('blocks').insert(payload).select().single();
       if (saved) STATE.blocks.push(saved);
     }
 
@@ -828,7 +828,7 @@ async function aiExpandArticle(articleId) {
         source: b.source || null,
         sort_order: baseOrder + i,
       };
-      const { data: saved } = await supabase.from('blocks').insert(payload).select().single();
+      const { data: saved } = await db.from('blocks').insert(payload).select().single();
       if (saved) STATE.blocks.push(saved);
     }
 
