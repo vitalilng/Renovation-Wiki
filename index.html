@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Renovation Wiki</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <style>
@@ -145,6 +146,20 @@
   .check-row label { font-size: 13.5px; cursor: pointer; }
   .hidden { display: none !important; }
 
+  /* ── Login screen ── */
+  #loginScreen { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 150; }
+  .login-card { background: var(--surface); border: 0.5px solid var(--border2); border-radius: var(--radius-lg); padding: 32px; width: 380px; max-width: 95vw; }
+  .login-card h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .login-card p { font-size: 13px; color: var(--text2); margin-bottom: 22px; line-height: 1.5; }
+  .login-btn { width: 100%; padding: 10px; background: var(--text); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 500; cursor: pointer; margin-top: 6px; font-family: inherit; }
+  .login-btn:hover { background: #2a2a28; }
+  .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .login-error { font-size: 12.5px; color: #c0392b; margin-top: 8px; display: none; }
+  .login-switch { font-size: 12.5px; color: var(--text2); margin-top: 14px; text-align: center; }
+  .login-switch a { color: var(--blue); cursor: pointer; text-decoration: none; }
+  .login-switch a:hover { text-decoration: underline; }
+  .user-pill { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); padding: 4px 8px; border-radius: 8px; background: var(--surface2); border: 0.5px solid var(--border); }
+
   /* ── Toast ── */
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 18px; border-radius: 9px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 999; }
 
@@ -188,6 +203,35 @@
   </div>
 </div>
 
+<!-- Login screen -->
+<div id="loginScreen" class="hidden">
+  <div class="login-card">
+    <h2>🔧 Renovation Wiki</h2>
+    <p id="loginSubtitle">Войди чтобы продолжить.</p>
+
+    <div class="config-group">
+      <label class="config-label">Email</label>
+      <input class="config-input" id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="config-group" id="loginPassGroup">
+      <label class="config-label">Пароль</label>
+      <input class="config-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') submitAuth()">
+    </div>
+    <div class="config-group hidden" id="loginPassGroup2">
+      <label class="config-label">Повтори пароль</label>
+      <input class="config-input" id="loginPassword2" type="password" placeholder="••••••••" autocomplete="new-password">
+    </div>
+
+    <button class="login-btn" id="loginBtn" onclick="submitAuth()">Войти</button>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-switch">
+      <span id="loginSwitchText">Нет аккаунта?</span>
+      <a onclick="toggleAuthMode()"> <span id="loginSwitchLink">Создать аккаунт</span></a>
+    </div>
+  </div>
+</div>
+
 <!-- Main app -->
 <div id="app" class="hidden">
   <div class="sidebar">
@@ -209,8 +253,10 @@
     <div class="topbar">
       <span class="topbar-title" id="topTitle">—</span>
       <div class="topbar-actions">
+        <span class="user-pill" id="userPill"><i class="ti ti-user"></i> <span id="userEmail">—</span></span>
         <button class="btn" onclick="exportMd()"><i class="ti ti-download"></i> Экспорт</button>
         <button class="btn btn-dark" onclick="openAddArticle()"><i class="ti ti-plus"></i> Статья</button>
+        <button class="btn" onclick="signOut()" title="Выйти"><i class="ti ti-logout"></i></button>
       </div>
     </div>
     <div class="content" id="content"></div>
@@ -343,10 +389,27 @@ let STATE = {
 // ══════════════════════ INIT ══════════════════════
 async function initApp() {
   document.getElementById('configScreen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
   db = window.supabase.createClient(CFG.supaUrl, CFG.supaKey);
-  await loadData();
-  checkAIStatus();
+
+  // Check existing session
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    await onSignedIn(session.user);
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+
+  // Listen for auth changes (e.g. email confirmation redirect)
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      document.getElementById('loginScreen').classList.add('hidden');
+      await onSignedIn(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  });
 }
 
 async function checkAIStatus() {
@@ -392,11 +455,12 @@ async function loadData() {
 }
 
 async function seedCategories() {
+  const uid = (await db.auth.getUser()).data.user?.id;
   const defaults = [
-    { name: 'Канализация', icon: 'ti-ripple',   color: '#1D9E75', bg: '#E1F5EE', sort_order: 0 },
-    { name: 'Сантехника',  icon: 'ti-droplet',  color: '#2A82D4', bg: '#E6F1FB', sort_order: 1 },
-    { name: 'Стройка',     icon: 'ti-building', color: '#B87316', bg: '#FDF3E3', sort_order: 2 },
-    { name: 'Электрика',   icon: 'ti-bolt',     color: '#D4537E', bg: '#FBEAF0', sort_order: 3 },
+    { name: 'Канализация', icon: 'ti-ripple',   color: '#1D9E75', bg: '#E1F5EE', sort_order: 0, user_id: uid },
+    { name: 'Сантехника',  icon: 'ti-droplet',  color: '#2A82D4', bg: '#E6F1FB', sort_order: 1, user_id: uid },
+    { name: 'Стройка',     icon: 'ti-building', color: '#B87316', bg: '#FDF3E3', sort_order: 2, user_id: uid },
+    { name: 'Электрика',   icon: 'ti-bolt',     color: '#D4537E', bg: '#FBEAF0', sort_order: 3, user_id: uid },
   ];
   const { data } = await db.from('categories').insert(defaults).select();
   STATE.categories = data || [];
@@ -541,8 +605,9 @@ async function addCategory() {
     { color: '#1D9E75', bg: '#E1F5EE' },
   ];
   const p = palettes[STATE.categories.length % palettes.length];
+  const uid = (await db.auth.getUser()).data.user?.id;
   const { data, error } = await db.from('categories').insert({
-    name, icon, color: p.color, bg: p.bg, sort_order: STATE.categories.length
+    name, icon, color: p.color, bg: p.bg, sort_order: STATE.categories.length, user_id: uid
   }).select().single();
   if (error) { toast('Ошибка: ' + error.message); return; }
   STATE.categories.push(data);
@@ -564,8 +629,9 @@ function openAddArticle() {
 async function addArticle() {
   const title = document.getElementById('na_title').value.trim();
   if (!title) return;
+  const uid = (await db.auth.getUser()).data.user?.id;
   const { data, error } = await db.from('articles').insert({
-    title, category_id: STATE.activeCatId, sort_order: STATE.articles.length
+    title, category_id: STATE.activeCatId, sort_order: STATE.articles.length, user_id: uid
   }).select().single();
   if (error) { toast('Ошибка: ' + error.message); return; }
   STATE.articles.push(data);
@@ -649,6 +715,7 @@ async function saveBlock(articleId) {
   } else {
     payload.article_id = articleId;
     payload.sort_order = STATE.blocks.filter(b => b.article_id === articleId).length;
+    payload.user_id = (await db.auth.getUser()).data.user?.id;
     const { data, error } = await db.from('blocks').insert(payload).select().single();
     if (error) { toast('Ошибка: ' + error.message); return; }
     STATE.blocks.push(data);
@@ -712,8 +779,9 @@ async function runAiGenerate(catId, catName) {
   closeModal();
 
   // Create article first
+  const uid = (await db.auth.getUser()).data.user?.id;
   const { data: art, error: artErr } = await db.from('articles').insert({
-    title: topic, category_id: catId, sort_order: STATE.articles.length
+    title: topic, category_id: catId, sort_order: STATE.articles.length, user_id: uid
   }).select().single();
   if (artErr) { toast('Ошибка создания статьи'); return; }
   STATE.articles.push(art);
@@ -770,6 +838,7 @@ async function runAiGenerate(catId, catName) {
         verified: !!b.verified,
         source: b.source || null,
         sort_order: i,
+        user_id: uid,
       };
       const { data: saved } = await db.from('blocks').insert(payload).select().single();
       if (saved) STATE.blocks.push(saved);
@@ -818,6 +887,7 @@ async function aiExpandArticle(articleId) {
     const blocks = JSON.parse(clean);
 
     const baseOrder = STATE.blocks.filter(b => b.article_id === articleId).length;
+    const uid = (await db.auth.getUser()).data.user?.id;
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i];
       const payload = {
@@ -827,6 +897,7 @@ async function aiExpandArticle(articleId) {
         verified: !!b.verified,
         source: b.source || null,
         sort_order: baseOrder + i,
+        user_id: uid,
       };
       const { data: saved } = await db.from('blocks').insert(payload).select().single();
       if (saved) STATE.blocks.push(saved);
@@ -885,11 +956,84 @@ function toast(msg) {
   setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 
+// ══════════════════════ AUTH ══════════════════════
+let _authMode = 'signin'; // 'signin' | 'signup'
+
+function toggleAuthMode() {
+  _authMode = _authMode === 'signin' ? 'signup' : 'signin';
+  const isSignup = _authMode === 'signup';
+  document.getElementById('loginBtn').textContent = isSignup ? 'Создать аккаунт' : 'Войти';
+  document.getElementById('loginSubtitle').textContent = isSignup ? 'Создай аккаунт для доступа к своей базе знаний.' : 'Войди чтобы продолжить.';
+  document.getElementById('loginSwitchText').textContent = isSignup ? 'Уже есть аккаунт?' : 'Нет аккаунта?';
+  document.getElementById('loginSwitchLink').textContent = isSignup ? 'Войти' : 'Создать аккаунт';
+  document.getElementById('loginPassGroup2').classList.toggle('hidden', !isSignup);
+  document.getElementById('loginError').style.display = 'none';
+}
+
+async function submitAuth() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPassword').value;
+  const pass2 = document.getElementById('loginPassword2')?.value;
+  const errEl = document.getElementById('loginError');
+  const btn   = document.getElementById('loginBtn');
+
+  if (!email || !pass) { errEl.textContent = 'Заполни email и пароль.'; errEl.style.display = 'block'; return; }
+  if (_authMode === 'signup' && pass !== pass2) { errEl.textContent = 'Пароли не совпадают.'; errEl.style.display = 'block'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Пароль минимум 6 символов.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  errEl.style.display = 'none';
+
+  try {
+    let result;
+    if (_authMode === 'signup') {
+      result = await db.auth.signUp({ email, password: pass });
+    } else {
+      result = await db.auth.signInWithPassword({ email, password: pass });
+    }
+
+    if (result.error) throw result.error;
+
+    if (_authMode === 'signup' && !result.data.session) {
+      errEl.style.color = '#1D9E75';
+      errEl.textContent = 'Аккаунт создан! Проверь email для подтверждения.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Создать аккаунт';
+      return;
+    }
+
+    await onSignedIn(result.data.user);
+  } catch(e) {
+    errEl.textContent = e.message || 'Ошибка входа';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = _authMode === 'signup' ? 'Создать аккаунт' : 'Войти';
+  }
+}
+
+async function onSignedIn(user) {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('userEmail').textContent = user.email;
+  await loadData();
+  checkAIStatus();
+}
+
+async function signOut() {
+  await db.auth.signOut();
+  STATE = { categories: [], articles: [], blocks: [], activeCatId: null, search: '' };
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginPassword').value = '';
+  toast('Вышел из аккаунта');
+}
+
 // ══════════════════════ BOOT ══════════════════════
 if (loadConfig()) {
   initApp();
 } else {
-  // Pre-fill if localStorage has partial data
   const raw = localStorage.getItem('rw_config');
   if (raw) {
     const c = JSON.parse(raw);
