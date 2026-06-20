@@ -417,7 +417,7 @@ async function checkAIStatus() {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': CFG.anthKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] })
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 5, messages: [{ role: 'user', content: 'hi' }] })
     });
     const ok = r.ok || r.status === 400;
     setStatus('ai', ok ? 'ok' : 'err', ok ? 'Anthropic OK' : 'Anthropic ошибка');
@@ -809,7 +809,7 @@ async function runAiGenerate(catId, catName) {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }]
@@ -874,7 +874,7 @@ async function aiExpandArticle(articleId) {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }]
